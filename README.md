@@ -4,6 +4,28 @@ Write your AI coding memory **once**, sync to **all 7 agents** — and keep it i
 
 One markdown file. Seven agent formats. Zero drift.
 
+## How it works
+
+```mermaid
+flowchart TD
+    M[".memory/memory.md\n(your source of truth)"]
+
+    M -->|memsync sync| S[Sync Engine]
+
+    S --> CL["CLAUDE.md"]
+    S --> CU[".cursor/rules.mdc"]
+    S --> CP[".github/copilot-instructions.md"]
+    S --> CO[".continue/memory.md"]
+    S --> WS[".windsurfrules"]
+    S --> CR[".clinerules"]
+    S --> AG["AGENTS.md"]
+
+    M <-->|auto pull/push| CACHE["~/.memsync/cache/\n(global git clone)"]
+    CACHE <-->|git| REMOTE["Private git remote\n(GitHub / GitLab / Gitea)"]
+    REMOTE <-->|git| CACHE2["~/.memsync/cache/\n(other device)"]
+    CACHE2 <-->|auto pull/push| M2[".memory/memory.md\n(other device)"]
+```
+
 ## Why
 
 Every AI agent (Claude Code, Cursor, Copilot, Continue, Windsurf, Cline) has its own memory format. You're trapped:
