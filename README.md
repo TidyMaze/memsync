@@ -1,15 +1,18 @@
 # memsync
 
-Write your AI coding memory **once**, sync to **all 7 agents**. One markdown file, infinite consistency.
+Write your AI coding memory **once**, sync to **all 7 agents** — and keep it in sync **across all your devices**.
+
+One markdown file. Seven agent formats. Zero drift.
 
 ## Why
 
 Every AI agent (Claude Code, Cursor, Copilot, Continue, Windsurf, Cline) has its own memory format. You're trapped:
 - Edit memory in Claude Code → forget to sync to Cursor → Cursor acts on stale context
 - Switch agents mid-project → lose all previous decisions and context
-- Maintain 7 separate files → chaos, inconsistency, nothing syncs
+- Switch machines → your memory stays on the other device
+- Maintain 7 separate files across N machines → chaos, inconsistency, nothing syncs
 
-**memsync** solves this: one canonical `.memory/memory.md`, syncs to all 7 agents automatically.
+**memsync** solves this: one canonical `.memory/memory.md`, synced to all 7 agent formats, replicated across all your devices via a private git repo.
 
 ## Install
 
@@ -22,17 +25,91 @@ bun install -g @memsync/cli
 ## Quick Start
 
 ```bash
+# 1. Initialize in your project
 memsync init
 # → creates .memory/memory.md scaffold
+# → adds .memory/ to .gitignore (stays out of your project repo)
 
-# Edit it with your project context, decisions, architecture notes
+# 2. Edit it with your project context, decisions, architecture notes
 
+# 3. Sync to all agents
 memsync sync
 # → writes to CLAUDE.md, .cursor/rules.mdc, .github/copilot-instructions.md,
 #   .continue/memory.md, .windsurfrules, .clinerules, AGENTS.md
 
+# 4. Check status
 memsync status
-# → shows sync status of all 7 targets
+```
+
+## Cross-Device Sync
+
+Keep `.memory/memory.md` in sync across all your machines via a private git repo.
+
+```bash
+# One-time setup (per user, not per project)
+memsync remote add git@github.com:you/memories-private.git
+# → clones remote into ~/.memsync/cache/
+
+# From now on, `memsync sync` auto-pulls + auto-pushes
+memsync sync
+# → ↓ Pulled from remote
+# → renders all 7 agent files
+# → ↑ Pushed to remote
+
+# On a new machine — just run pull first
+memsync pull
+# → ↓ Pulled from remote (auto-detects project)
+memsync sync
+# → renders all 7 agent files with your existing memory
+```
+
+### How it works
+
+- `.memory/` lives **outside** your project's git history (added to `.gitignore` by `memsync init`)
+- A global cache at `~/.memsync/cache/` is a full clone of your private remote
+- `memsync sync` pulls before rendering, pushes after — so all machines stay current
+- If you have local edits not yet pushed, pull is skipped (your changes take priority)
+- Works offline: push/pull soft-fail with `⊘ offline` and sync continues
+
+### Auto pull/push behavior
+
+Auto pull/push is **on by default** once a remote is configured. Config lives in `~/.memsync/config.json`:
+
+```json
+{
+  "version": 1,
+  "remoteUrl": "git@github.com:you/memories-private.git",
+  "autoPush": true,
+  "autoPull": true
+}
+```
+
+To disable for a single run:
+
+```bash
+memsync sync --no-pull   # skip pull, still push after
+memsync sync --no-push   # skip push, still pull before
+memsync sync --no-pull --no-push  # local-only sync
+```
+
+Pull is also automatically skipped when local edits are detected (to avoid overwriting uncommitted work). In that case, sync pushes instead:
+
+```
+⊘ Local edits detected — skipped pull (will push)
+  written    CLAUDE.md  (sha abc123)
+  ...
+↑ Pushed to remote
+```
+
+```bash
+# Explicit push/pull
+memsync push                           # copy → commit → push
+memsync push --message "add db notes"  # custom commit message
+memsync pull                           # pull → copy to .memory/memory.md
+
+# Manage remote
+memsync remote show                    # print remote URL
+memsync remote remove                  # unlink (keeps local files)
 ```
 
 ## What Goes in `.memory/memory.md`
@@ -55,277 +132,84 @@ project: my-app
 
 ## Why we use Postgres instead of MongoDB
 - Strong ACID guarantees required for payment flows
-- SQL queries easier to optimize for large datasets
 - Team expertise skews SQL
 
 ## Why we skip TypeScript in tests
 - Test code churn too high (types break often)
-- Runtime errors caught by actual test execution
-- Type safety less critical for test helpers
 
 # Current Blockers
 
 - S3 upload performance timeout at 500MB
 - Need to switch to multipart upload
-
-# API Structure
-
-- POST /api/payments → Stripe webhook processor
-- GET /api/user/:id → fetch user + balance
-
 ```
 
-**Do NOT store** in memory:
-- Linting rules, formatting preferences (those go in `.editorconfig`, `prettier.config.js`)
-- Workflow procedures, how-tos (those are GitHub docs)
-- Your personal notes (use a separate private file)
+**Do NOT store**: linting rules, formatting preferences, workflow how-tos, personal notes.
 
 ## Agent Format Support
 
-| Agent | Target File | Format | MCP | Setup |
-|-------|-------------|--------|-----|-------|
-| **Claude Code** | `CLAUDE.md` | Plain markdown | ✓ | Automatic (reads `CLAUDE.md` as context) |
-| **Cursor** | `.cursor/rules.mdc` | MDC (YAML + markdown) | ✓ | Via `.cursor/mcp.json` |
-| **GitHub Copilot** | `.github/copilot-instructions.md` | Plain markdown | ✓ | VS Code settings |
-| **Continue** | `.continue/memory.md` | Plain markdown | ✓ | Add as context provider in `.continue/config.json` |
-| **Windsurf** | `.windsurfrules` | Plain markdown | ✓ | Via `.windsurf/mcp.json` |
-| **Cline** | `.clinerules` | Plain markdown | ✓ | VS Code settings |
-| **OpenAI Codex** | `AGENTS.md` | Plain markdown | ✓ | Via `~/.codex/config.toml` |
-
-All 7 agents support **MCP** for dynamic memory queries (see [MCP Setup](#mcp-setup) below).
+| Agent | Target File | Format | MCP |
+|-------|-------------|--------|-----|
+| **Claude Code** | `CLAUDE.md` | Plain markdown | ✓ |
+| **Cursor** | `.cursor/rules.mdc` | MDC (YAML + markdown) | ✓ |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | Plain markdown | ✓ |
+| **Continue** | `.continue/memory.md` | Plain markdown | ✓ |
+| **Windsurf** | `.windsurfrules` | Plain markdown | ✓ |
+| **Cline** | `.clinerules` | Plain markdown | ✓ |
+| **OpenAI Codex** | `AGENTS.md` | Plain markdown | ✓ |
 
 ## Scope Directives
 
-Target memory to specific agents using scope comments:
-
-### Block Scope
+Target memory to specific agents:
 
 ```markdown
 <!-- @scope:claude,cursor -->
-
-# Architecture Notes
-
+## Architecture Notes
 Only Claude Code and Cursor see this section.
-
 <!-- @endscope -->
-```
 
-### Inline Scope (in headings)
-
-```markdown
 ## Backend Setup <!-- @scope:!copilot -->
-
 Everyone except Copilot sees this.
 ```
 
-### Negation Syntax
-
-- `<!-- @scope:!agent -->` = exclude agent
-- `<!-- @scope:x,!y -->` = include x, exclude y
-
-Agents with no directive → included everywhere.
-
-## Setup per Agent
-
-### Claude Code
-
-1. `memsync sync` creates `CLAUDE.md`
-2. Claude Code automatically reads it as context in this project
-
-No config needed.
-
-### Cursor
-
-After `memsync sync`:
-
-1. Create `.cursor/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "command": "memsync",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-2. Or use Cursor's built-in `.cursor/rules.mdc` sync (auto-updated by memsync)
-
-### GitHub Copilot
-
-After `memsync sync`:
-
-1. VS Code `settings.json`:
-```json
-{
-  "github.copilot.mcp.servers": {
-    "memory": {
-      "command": "memsync",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-2. Copilot reads `.github/copilot-instructions.md` by default
-
-### Continue
-
-After `memsync sync`:
-
-1. `.continue/config.json`:
-```json
-{
-  "contextProviders": [
-    {
-      "name": "file",
-      "params": { "filepath": ".continue/memory.md" }
-    }
-  ],
-  "mcpServers": [
-    {
-      "name": "memory",
-      "command": "memsync",
-      "args": ["mcp"]
-    }
-  ]
-}
-```
-
-### Windsurf
-
-After `memsync sync`:
-
-1. `.windsurf/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "command": "memsync",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-### Cline
-
-After `memsync sync`:
-
-1. VS Code `settings.json`:
-```json
-{
-  "cline.mcpServers": {
-    "memory": {
-      "command": "memsync",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-### OpenAI Codex
-
-After `memsync sync`:
-
-1. `~/.codex/config.toml`:
-```toml
-[mcp.servers.memory]
-command = "memsync"
-args = ["mcp"]
-```
+- `<!-- @scope:x,y -->` — include only agents x and y
+- `<!-- @scope:!x -->` — exclude agent x
+- No directive → visible to all agents
 
 ## Commands
 
 ### `memsync init`
+Create `.memory/memory.md` scaffold. Adds `.memory/` to `.gitignore` if in a git repo.
 
-Create `.memory/memory.md` scaffold with example sections.
+### `memsync sync [options]`
+Render to all 7 formats. Auto-pulls before + auto-pushes after (if remote configured).
 
-```bash
-memsync init
 ```
-
-Aborts if file already exists.
-
-### `memsync sync`
-
-Render `.memory/memory.md` to all 7 agent formats. Updates `.memory/state.json` with content hashes.
-
-```bash
-memsync sync              # normal sync
-memsync sync --dry-run    # preview without writing
-memsync sync --force      # override hand-edited files
-memsync sync --only=claude,cursor  # sync only these agents
-```
-
-Output:
-```
-CLAUDE.md              written  (sha a1b2c3d4e5f6...)
-.cursor/rules.mdc      unchanged
-.github/copilot...     SKIPPED  hand-edited (use --force to override)
-...
-Done. 2 written, 1 unchanged, 1 skipped.
+--dry-run        preview without writing
+--force          override hand-edited files
+--only=x,y       sync only these agent IDs
+--no-pull        skip auto-pull
+--no-push        skip auto-push
 ```
 
 ### `memsync status`
+Show sync status per target: `✓ in sync` | `~ stale` | `! hand-edited` | `✗ missing`.
+Shows remote ahead/behind if remote configured.
 
-Show sync status of all targets. Detects hand-edits, stale content, missing files.
+### `memsync push [--message <msg>]`
+Copy `.memory/memory.md` to cache, commit, push to remote.
 
-```bash
-memsync status
+### `memsync pull`
+Pull from remote, copy to `.memory/memory.md`. On fresh machine: auto-detects project from cache.
 
-✓ CLAUDE.md                    in sync
-✓ .cursor/rules.mdc            in sync
-~ .github/copilot-...          stale (source changed, run `memsync sync`)
-! .windsurfrules               hand-edited (use `memsync sync --force` to overwrite)
-✗ AGENTS.md                    missing (run `memsync sync`)
-```
+### `memsync remote add <url>`
+One-time setup. Clones `<url>` into `~/.memsync/cache/`. Enables auto-push/pull on sync.
 
-## MCP Setup
-
-All 7 agents support MCP. Once configured, agents can dynamically query memory without re-syncing:
-
-```bash
-memsync mcp
-```
-
-Starts an MCP server on stdio with 4 tools:
-
-| Tool | Input | Output |
-|------|-------|--------|
-| `memory.read` | `{ section?: string }` | markdown (whole file or one section) |
-| `memory.search` | `{ query: string, limit?: number }` | search results via ripgrep |
-| `memory.list_targets` | `{}` | list of all sync targets + status |
-| `memory.sync` | `{ dry?: boolean }` | run sync from MCP |
-
-**Example** — Claude Code queries memory dynamically:
-
-Agent: "I need context on your database schema"
-Claude Code: (calls `memory.read` with section="Database Schema")
-Result: markdown from `.memory/memory.md` returned in real-time
+### `memsync mcp`
+Start MCP stdio server. Exposes `memory.read`, `memory.search`, `memory.list_targets`, `memory.sync`.
 
 ## Drift Detection
 
-memsync tracks file hashes in `.memory/state.json`:
-
-```json
-{
-  "version": 1,
-  "targets": {
-    "CLAUDE.md": { "sha": "a1b2c3...", "writtenAt": "2026-04-23T10:00:00Z" },
-    ".cursor/rules.mdc": { "sha": "d4e5f6...", "writtenAt": "2026-04-23T10:00:00Z" }
-  }
-}
-```
-
-When you run `memsync sync`:
-- Compares on-disk SHA with `.memory/state.json` SHA
-- Match → safe to overwrite (was written by memsync)
-- Mismatch → file was hand-edited → skip (print SKIPPED)
-- Use `--force` to override hand-edits
-
-This prevents overwriting agent-specific tweaks while ensuring you don't accidentally use stale memory.
+Tracks SHA-256 hashes in `.memory/state.json`. On sync: if on-disk hash differs from recorded hash, file was hand-edited → skip (use `--force` to override).
 
 ## License
 
@@ -333,22 +217,11 @@ MIT — use freely, modify, redistribute.
 
 ## Contributing
 
-Found a bug? Want to add an agent?
-
-1. Fork [anthropics/memsync](https://github.com/anthropics/memsync)
-2. Create branch: `git checkout -b fix/my-issue`
-3. Commit: `git commit -am 'Fix X'`
-4. Push: `git push origin fix/my-issue`
-5. Open PR
+1. Fork [TidyMaze/memsync](https://github.com/TidyMaze/memsync)
+2. `git checkout -b fix/my-issue`
+3. `git commit -am 'Fix X'`
+4. Open PR
 
 ## Acknowledgments
 
-Built with:
-- [Bun](https://bun.sh) — TypeScript runtime
-- [Remark](https://github.com/remarkjs/remark) — markdown parser
-- [Model Context Protocol](https://modelcontextprotocol.io) — MCP SDK
-- [Biome](https://biomejs.dev) — linter + formatter
-
----
-
-**Questions?** See the [full docs](./docs) or open an issue.
+Built with [Bun](https://bun.sh), [Remark](https://github.com/remarkjs/remark), [MCP SDK](https://modelcontextprotocol.io), [Biome](https://biomejs.dev).
