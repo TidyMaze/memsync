@@ -26,6 +26,39 @@ flowchart TD
     CACHE2 <-->|auto pull/push| M2[".memory/memory.md\n(other device)"]
 ```
 
+### Cross-device sync sequence
+
+```mermaid
+sequenceDiagram
+    participant A as Device A
+    participant Cache as ~/.memsync/cache
+    participant Remote as Private git remote
+    participant B as Device B
+
+    Note over A: Edit .memory/memory.md
+
+    A->>Cache: pull (ff-only)
+    Cache->>Remote: git fetch
+    Remote-->>Cache: up to date
+    Cache-->>A: ↓ nothing new
+
+    A->>A: render 7 agent files
+    A->>Cache: copyIn (memory.md → cache/slug/)
+    Cache->>Remote: git push
+    Remote-->>Cache: ✓ pushed
+    Cache-->>A: ↑ Pushed to remote
+
+    Note over B: On another machine
+
+    B->>Cache: pull (ff-only)
+    Cache->>Remote: git fetch
+    Remote-->>Cache: new commit
+    Cache-->>B: ↓ Pulled from remote
+    B->>B: copyOut (cache/slug/ → .memory/memory.md)
+    B->>B: render 7 agent files
+    B->>Remote: push (nothing to push — no local changes)
+```
+
 ## Why
 
 Every AI agent (Claude Code, Cursor, Copilot, Continue, Windsurf, Cline) has its own memory format. You're trapped:
